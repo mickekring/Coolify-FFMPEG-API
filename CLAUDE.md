@@ -35,11 +35,20 @@ All processing endpoints accept `multipart/form-data` with a single file:
 - `POST /info` - Uses ffprobe to get media metadata
 - `GET /health` - Health check endpoint
 
+## Security
+
+**API Key Authentication**: All endpoints (except `/health`) require the `X-API-Key` header. The API key is set via the `API_KEY` environment variable in Coolify. If `API_KEY` is not set, authentication is disabled (logs a warning).
+
 ## Commands
 
 **Start server**:
 ```bash
 npm start
+```
+
+**Start with API key**:
+```bash
+API_KEY=your-secret-key npm start
 ```
 
 **Run with Docker**:

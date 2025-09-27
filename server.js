@@ -9,6 +9,7 @@ const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const API_KEY = process.env.API_KEY;
 
 // Configure multer for file uploads
 const upload = multer({
@@ -20,13 +21,33 @@ const upload = multer({
 
 app.use(express.json());
 
-// Health check
+// API Key authentication middleware
+const authenticateApiKey = (req, res, next) => {
+  const providedKey = req.headers['x-api-key'];
+  
+  if (!API_KEY) {
+    console.warn('WARNING: API_KEY not set. Authentication disabled.');
+    return next();
+  }
+  
+  if (!providedKey) {
+    return res.status(401).json({ error: 'API key required. Provide X-API-Key header.' });
+  }
+  
+  if (providedKey !== API_KEY) {
+    return res.status(403).json({ error: 'Invalid API key' });
+  }
+  
+  next();
+};
+
+// Health check (no auth required)
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', service: 'ffmpeg-api' });
 });
 
 // Compress audio for transcription (Whisper/Groq optimal)
-app.post('/compress/transcription', upload.single('file'), async (req, res) => {
+app.post('/compress/transcription', authenticateApiKey, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -69,7 +90,7 @@ app.post('/compress/transcription', upload.single('file'), async (req, res) => {
 });
 
 // Custom compression
-app.post('/compress/custom', upload.single('file'), async (req, res) => {
+app.post('/compress/custom', authenticateApiKey, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -118,7 +139,7 @@ app.post('/compress/custom', upload.single('file'), async (req, res) => {
 });
 
 // Convert format
-app.post('/convert', upload.single('file'), async (req, res) => {
+app.post('/convert', authenticateApiKey, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -153,7 +174,7 @@ app.post('/convert', upload.single('file'), async (req, res) => {
 });
 
 // Extract audio from video
-app.post('/extract-audio', upload.single('file'), async (req, res) => {
+app.post('/extract-audio', authenticateApiKey, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -190,7 +211,7 @@ app.post('/extract-audio', upload.single('file'), async (req, res) => {
 });
 
 // Split audio into chunks
-app.post('/split', upload.single('file'), async (req, res) => {
+app.post('/split', authenticateApiKey, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -240,7 +261,7 @@ app.post('/split', upload.single('file'), async (req, res) => {
 });
 
 // Get media info
-app.post('/info', upload.single('file'), async (req, res) => {
+app.post('/info', authenticateApiKey, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }

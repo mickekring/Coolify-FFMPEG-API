@@ -2,6 +2,19 @@
 
 This guide shows how to use the FFmpeg API service in your n8n workflows.
 
+## Authentication
+
+All endpoints (except `/health`) require API key authentication.
+
+**Setup in Coolify:**
+1. Set environment variable: `API_KEY=your-secret-key-here`
+2. Generate a strong key: `openssl rand -hex 32`
+
+**In n8n HTTP Request nodes:**
+Add a header:
+- **Name:** `X-API-Key`
+- **Value:** `your-secret-key-here`
+
 ## Service URL
 
 When deployed on Coolify, the service can be accessed in two ways:
@@ -25,8 +38,11 @@ For all endpoints (except `/health`):
 1. Use the **HTTP Request** node
 2. Set **Method** to `POST`
 3. Set **Body Content Type** to `Form-Data (Multipart)`
-4. Add your file as a binary field
-5. Add any additional parameters as form fields
+4. **Add Authentication Header:**
+   - Header Name: `X-API-Key`
+   - Header Value: Your API key from Coolify environment variable
+5. Add your file as a binary field
+6. Add any additional parameters as form fields
 
 ---
 
@@ -41,6 +57,10 @@ For all endpoints (except `/health`):
 URL: https://ffmpeg.labbytan.se/compress/transcription
 Method: POST
 Body Content Type: Form-Data (Multipart)
+
+Headers:
+- Name: X-API-Key
+  Value: your-api-key
 
 Body Parameters:
 - Name: file
@@ -285,6 +305,14 @@ Method: GET
 ---
 
 ## Troubleshooting
+
+**"API key required" error (401):**
+- Add the `X-API-Key` header to your request
+- Verify the header name is exactly `X-API-Key` (case-sensitive)
+
+**"Invalid API key" error (403):**
+- Check that the API key matches the one set in Coolify environment variable `API_KEY`
+- Ensure there are no extra spaces or characters
 
 **"No file uploaded" error:**
 - Ensure the file field name is exactly `file`
