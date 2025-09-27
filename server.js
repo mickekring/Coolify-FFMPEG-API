@@ -32,13 +32,13 @@ app.post('/compress/transcription', upload.single('file'), async (req, res) => {
   }
 
   const inputPath = req.file.path;
-  const outputPath = `/tmp/outputs/${crypto.randomBytes(16).toString('hex')}.flac`;
+  const outputPath = `/tmp/outputs/${crypto.randomBytes(16).toString('hex')}.mp3`;
 
   try {
     await fs.mkdir('/tmp/outputs', { recursive: true });
 
-    // Convert to 16kHz mono FLAC (optimal for Whisper)
-    const command = `ffmpeg -i "${inputPath}" -ar 16000 -ac 1 -c:a flac "${outputPath}" -y`;
+    // Convert to 16kHz mono MP3 at 64kbps (optimal for Whisper)
+    const command = `ffmpeg -i "${inputPath}" -ar 16000 -ac 1 -b:a 64k "${outputPath}" -y`;
     
     try {
       await execPromise(command);
@@ -48,8 +48,8 @@ app.post('/compress/transcription', upload.single('file'), async (req, res) => {
       await fs.unlink(outputPath).catch(() => {});
 
       res.set({
-        'Content-Type': 'audio/flac',
-        'Content-Disposition': 'attachment; filename="compressed.flac"',
+        'Content-Type': 'audio/mpeg',
+        'Content-Disposition': 'attachment; filename="compressed.mp3"',
         'X-Original-Size': req.file.size,
         'X-Compressed-Size': stats.size,
         'X-Compression-Ratio': `${((1 - stats.size / req.file.size) * 100).toFixed(2)}%`

@@ -4,10 +4,19 @@ This guide shows how to use the FFmpeg API service in your n8n workflows.
 
 ## Service URL
 
-When deployed on Coolify, the service is available internally at:
+When deployed on Coolify, the service can be accessed in two ways:
+
+**Option 1: Internal Network (Docker services only)**
 ```
 http://ffmpeg-api:3000
 ```
+*Note: Requires both services to be in the same Docker network in Coolify*
+
+**Option 2: External Domain (Recommended for n8n)**
+```
+https://ffmpeg.labbytan.se
+```
+*Accessible from anywhere, including n8n workflows*
 
 ## General n8n Configuration
 
@@ -25,11 +34,11 @@ For all endpoints (except `/health`):
 
 ### 1. Compress Audio for Transcription (Whisper/Groq)
 
-**Optimized for speech-to-text services (16kHz mono FLAC)**
+**Optimized for speech-to-text services (16kHz mono MP3 at 64kbps)**
 
 **n8n HTTP Request Node Configuration:**
 ```
-URL: http://ffmpeg-api:3000/compress/transcription
+URL: https://ffmpeg.labbytan.se/compress/transcription
 Method: POST
 Body Content Type: Form-Data (Multipart)
 
