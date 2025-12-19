@@ -15,7 +15,7 @@ const API_KEY = process.env.API_KEY;
 const upload = multer({
   dest: '/tmp/uploads/',
   limits: {
-    fileSize: 500 * 1024 * 1024 // 500MB max
+    fileSize: 5000 * 1024 * 1024 // 5000MB max
   }
 });
 
