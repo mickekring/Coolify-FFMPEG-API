@@ -144,15 +144,27 @@ app.post('/convert', authenticateApiKey, upload.single('file'), async (req, res)
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  const { outputFormat = 'mp3' } = req.body;
+  const {
+    outputFormat = 'mp3',
+    // Input format params for raw PCM files
+    inputFormat,      // e.g., "s16le" (16-bit signed little-endian)
+    inputSampleRate,  // e.g., "24000"
+    inputChannels     // e.g., "1"
+  } = req.body;
   const inputPath = req.file.path;
   const outputPath = `/tmp/outputs/${crypto.randomBytes(16).toString('hex')}.${outputFormat}`;
 
   try {
     await fs.mkdir('/tmp/outputs', { recursive: true });
 
+    // Build command with optional input format flags for raw PCM
+    let inputFlags = '';
+    if (inputFormat) inputFlags += ` -f ${inputFormat}`;
+    if (inputSampleRate) inputFlags += ` -ar ${inputSampleRate}`;
+    if (inputChannels) inputFlags += ` -ac ${inputChannels}`;
+
     try {
-      await execPromise(`ffmpeg -i "${inputPath}" "${outputPath}" -y`);
+      await execPromise(`ffmpeg${inputFlags} -i "${inputPath}" "${outputPath}" -y`);
       
       const convertedFile = await fs.readFile(outputPath);
       await fs.unlink(outputPath).catch(() => {});
