@@ -12,23 +12,35 @@ const http = require('http');
 const app = express();
 
 // Helper to download file from URL to temp path
-async function downloadFile(url, destPath) {
+async function downloadFile(url, destPath, headers = {}) {
   return new Promise((resolve, reject) => {
-    const protocol = url.startsWith('https') ? https : http;
+    const parsedUrl = new URL(url);
+    const protocol = parsedUrl.protocol === 'https:' ? https : http;
     const file = require('fs').createWriteStream(destPath);
 
-    protocol.get(url, (response) => {
+    const options = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + parsedUrl.search,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        ...headers
+      }
+    };
+
+    protocol.get(options, (response) => {
       if (response.statusCode === 301 || response.statusCode === 302) {
         // Handle redirects
         file.close();
         require('fs').unlinkSync(destPath);
-        return downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
+        return downloadFile(response.headers.location, destPath, headers).then(resolve).catch(reject);
       }
 
       if (response.statusCode !== 200) {
         file.close();
         require('fs').unlinkSync(destPath);
-        return reject(new Error(`Failed to download: ${response.statusCode}`));
+        return reject(new Error(`Failed to download from ${parsedUrl.hostname}: ${response.statusCode}`));
       }
 
       response.pipe(file);
