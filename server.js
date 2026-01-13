@@ -6,8 +6,43 @@ const execPromise = promisify(exec);
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const https = require('https');
+const http = require('http');
 
 const app = express();
+
+// Helper to download file from URL to temp path
+async function downloadFile(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const protocol = url.startsWith('https') ? https : http;
+    const file = require('fs').createWriteStream(destPath);
+
+    protocol.get(url, (response) => {
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        // Handle redirects
+        file.close();
+        require('fs').unlinkSync(destPath);
+        return downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
+      }
+
+      if (response.statusCode !== 200) {
+        file.close();
+        require('fs').unlinkSync(destPath);
+        return reject(new Error(`Failed to download: ${response.statusCode}`));
+      }
+
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close();
+        resolve(destPath);
+      });
+    }).on('error', (err) => {
+      file.close();
+      require('fs').unlink(destPath, () => {});
+      reject(err);
+    });
+  });
+}
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY;
 
@@ -291,6 +326,113 @@ app.post('/info', authenticateApiKey, upload.single('file'), async (req, res) =>
     }
   } finally {
     await fs.unlink(inputPath).catch(() => {});
+  }
+});
+
+// Merge podcast segments with intro/outro jingle
+app.post('/merge-podcast', authenticateApiKey, async (req, res) => {
+  const {
+    jingleUrl,
+    segmentUrls,
+    introOverlapSeconds = 7,
+    outputBitrate = '192k'
+  } = req.body;
+
+  // Validate required fields
+  if (!jingleUrl) {
+    return res.status(400).json({ error: 'jingleUrl is required' });
+  }
+  if (!segmentUrls || !Array.isArray(segmentUrls) || segmentUrls.length === 0) {
+    return res.status(400).json({ error: 'segmentUrls array is required and must not be empty' });
+  }
+
+  const tempDir = `/tmp/podcast_${crypto.randomBytes(8).toString('hex')}`;
+  const downloadedFiles = [];
+
+  try {
+    await fs.mkdir(tempDir, { recursive: true });
+
+    // Download jingle
+    const jinglePath = path.join(tempDir, 'jingle.mp3');
+    await downloadFile(jingleUrl, jinglePath);
+    downloadedFiles.push(jinglePath);
+
+    // Download all segments
+    const segmentPaths = [];
+    for (let i = 0; i < segmentUrls.length; i++) {
+      const segPath = path.join(tempDir, `segment_${i}.mp3`);
+      await downloadFile(segmentUrls[i], segPath);
+      downloadedFiles.push(segPath);
+      segmentPaths.push(segPath);
+    }
+
+    const outputPath = path.join(tempDir, 'final_output.mp3');
+    const overlapMs = introOverlapSeconds * 1000;
+
+    // Build FFmpeg command with complex filtergraph
+    // 1. Input 0: jingle (for intro)
+    // 2. Inputs 1-N: segments
+    // 3. Last input: jingle again (for outro)
+
+    let inputArgs = `-i "${jinglePath}"`;
+    segmentPaths.forEach(p => {
+      inputArgs += ` -i "${p}"`;
+    });
+    inputArgs += ` -i "${jinglePath}"`; // outro jingle
+
+    // Build filter_complex
+    // [1] = first segment, delay it and mix with [0] (intro jingle)
+    // Then concat: mixed intro + remaining segments + outro jingle
+
+    const totalInputs = 1 + segmentPaths.length + 1; // intro jingle + segments + outro jingle
+    const outroIndex = totalInputs - 1;
+
+    let filterComplex = '';
+
+    // Delay first segment and mix with intro jingle
+    filterComplex += `[1]adelay=${overlapMs}|${overlapMs}[delayed];`;
+    filterComplex += `[0][delayed]amix=inputs=2:duration=longest:normalize=0[intro_mixed];`;
+
+    // Build concat chain
+    let concatInputs = '[intro_mixed]';
+
+    // Add remaining segments (indices 2 to N-1)
+    for (let i = 2; i < totalInputs - 1; i++) {
+      concatInputs += `[${i}]`;
+    }
+
+    // Add outro jingle
+    concatInputs += `[${outroIndex}]`;
+
+    const numConcatInputs = 1 + (segmentPaths.length - 1) + 1; // intro_mixed + remaining segments + outro
+    filterComplex += `${concatInputs}concat=n=${numConcatInputs}:v=0:a=1[out]`;
+
+    const command = `ffmpeg ${inputArgs} -filter_complex "${filterComplex}" -map "[out]" -b:a ${outputBitrate} "${outputPath}" -y`;
+
+    try {
+      await execPromise(command, { maxBuffer: 50 * 1024 * 1024 });
+
+      const stats = await fs.stat(outputPath);
+      const mergedFile = await fs.readFile(outputPath);
+
+      res.set({
+        'Content-Type': 'audio/mpeg',
+        'Content-Disposition': 'attachment; filename="podcast_merged.mp3"',
+        'X-Output-Size': stats.size,
+        'X-Segments-Count': segmentUrls.length
+      });
+
+      res.send(mergedFile);
+    } catch (error) {
+      console.error('FFmpeg error:', error.stderr || error.message);
+      res.status(500).json({ error: 'Merge failed', details: error.stderr || error.message });
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Failed to process podcast', details: error.message });
+  } finally {
+    // Clean up temp directory
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 });
 
