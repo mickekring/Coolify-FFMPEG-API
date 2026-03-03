@@ -347,7 +347,7 @@ app.post('/merge-podcast', authenticateApiKey, async (req, res) => {
     jingleUrl,
     segmentUrls,
     introOverlapSeconds = 7,
-    outputBitrate = '192k'
+    outputBitrate = '128k'
   } = req.body;
 
   // Validate required fields
